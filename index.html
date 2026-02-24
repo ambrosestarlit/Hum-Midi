@@ -1,0 +1,1275 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hum → MIDI</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #12121a;
+    --surface2: #1a1a26;
+    --border: #2a2a3e;
+    --accent: #7c3aed;
+    --accent2: #06b6d4;
+    --accent3: #f59e0b;
+    --text: #e8e8f0;
+    --text-muted: #6b6b8a;
+    --note-c: #7c3aed;
+    --note-d: #6366f1;
+    --note-e: #0ea5e9;
+    --note-f: #06b6d4;
+    --note-g: #10b981;
+    --note-a: #f59e0b;
+    --note-b: #ef4444;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Background grid */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(124,58,237,0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(124,58,237,0.04) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .app {
+    position: relative;
+    z-index: 1;
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 40px 24px;
+  }
+
+  header {
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+    margin-bottom: 48px;
+  }
+
+  .logo {
+    font-family: 'Syne', sans-serif;
+    font-size: 2.4rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    letter-spacing: -0.02em;
+  }
+
+  .tagline {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  /* Upload Zone */
+  .upload-zone {
+    border: 2px dashed var(--border);
+    border-radius: 16px;
+    padding: 48px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    background: var(--surface);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .upload-zone::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(124,58,237,0.05), rgba(6,182,212,0.05));
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+
+  .upload-zone:hover, .upload-zone.drag-over {
+    border-color: var(--accent);
+    transform: translateY(-2px);
+  }
+
+  .upload-zone:hover::before, .upload-zone.drag-over::before {
+    opacity: 1;
+  }
+
+  .upload-icon {
+    font-size: 3rem;
+    margin-bottom: 16px;
+    display: block;
+  }
+
+  .upload-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 1.2rem;
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+
+  .upload-sub {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    letter-spacing: 0.05em;
+  }
+
+  #fileInput { display: none; }
+
+  /* Controls */
+  .controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-top: 24px;
+  }
+
+  .control-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+  }
+
+  .control-label {
+    font-size: 0.65rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .control-value {
+    color: var(--accent2);
+    font-size: 0.9rem;
+    font-weight: 700;
+  }
+
+  input[type="range"] {
+    width: 100%;
+    -webkit-appearance: none;
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+  }
+
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px;
+    height: 16px;
+    background: var(--accent);
+    border-radius: 50%;
+    cursor: pointer;
+    transition: transform 0.2s;
+    box-shadow: 0 0 8px rgba(124,58,237,0.5);
+  }
+
+  input[type="range"]::-webkit-slider-thumb:hover {
+    transform: scale(1.3);
+  }
+
+  /* Analyze button */
+  .btn-primary {
+    width: 100%;
+    margin-top: 24px;
+    padding: 18px;
+    background: linear-gradient(135deg, var(--accent), #5b21b6);
+    border: none;
+    border-radius: 12px;
+    color: white;
+    font-family: 'Syne', sans-serif;
+    font-size: 1rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .btn-primary::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, transparent 30%, rgba(255,255,255,0.1));
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+
+  .btn-primary:hover::after { opacity: 1; }
+  .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(124,58,237,0.4); }
+  .btn-primary:active { transform: translateY(0); }
+  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+  /* Progress */
+  .progress-wrap {
+    margin-top: 24px;
+    display: none;
+  }
+
+  .progress-wrap.show { display: block; }
+
+  .progress-bar-bg {
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .progress-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    border-radius: 2px;
+    transition: width 0.1s ease;
+    box-shadow: 0 0 8px var(--accent);
+  }
+
+  .progress-text {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    margin-top: 8px;
+    letter-spacing: 0.08em;
+  }
+
+  /* Piano Roll */
+  .piano-roll-section {
+    margin-top: 40px;
+    display: none;
+  }
+
+  .piano-roll-section.show { display: block; }
+
+  .section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+  }
+
+  .section-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  .stats {
+    display: flex;
+    gap: 16px;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+  }
+
+  .stat-val {
+    color: var(--accent2);
+    font-weight: 700;
+  }
+
+  .piano-roll-container {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .piano-roll-scroll {
+    overflow-x: auto;
+    overflow-y: auto;
+    max-height: 360px;
+  }
+
+  .piano-roll-scroll::-webkit-scrollbar { height: 6px; width: 6px; }
+  .piano-roll-scroll::-webkit-scrollbar-track { background: var(--surface); }
+  .piano-roll-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  canvas#pianoRoll {
+    display: block;
+    image-rendering: crisp-edges;
+  }
+
+  /* Note list */
+  .note-list-section {
+    margin-top: 24px;
+    display: none;
+  }
+
+  .note-list-section.show { display: block; }
+
+  .note-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
+    max-height: 100px;
+    overflow-y: auto;
+  }
+
+  .note-chip {
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    border: 1px solid;
+  }
+
+  /* Download */
+  .download-section {
+    margin-top: 24px;
+    display: none;
+  }
+
+  .download-section.show { display: flex; gap: 12px; }
+
+  .btn-download {
+    flex: 1;
+    padding: 14px;
+    border-radius: 10px;
+    border: 1px solid;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+    transition: all 0.25s;
+    text-align: center;
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .btn-midi {
+    background: rgba(124,58,237,0.1);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .btn-midi:hover {
+    background: rgba(124,58,237,0.2);
+    box-shadow: 0 0 16px rgba(124,58,237,0.3);
+    transform: translateY(-1px);
+  }
+
+  .btn-reset {
+    background: rgba(107,107,138,0.1);
+    border-color: var(--border);
+    color: var(--text-muted);
+  }
+
+  .btn-reset:hover {
+    background: rgba(107,107,138,0.2);
+    color: var(--text);
+  }
+
+  /* Playback */
+  .playback-section {
+    margin-top: 16px;
+    display: none;
+  }
+
+  .playback-section.show {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+
+  .btn-play {
+    padding: 10px 20px;
+    background: rgba(6,182,212,0.1);
+    border: 1px solid var(--accent2);
+    border-radius: 8px;
+    color: var(--accent2);
+    font-family: 'Space Mono', monospace;
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .btn-play:hover { background: rgba(6,182,212,0.2); }
+
+  .playhead-info {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+  }
+
+  /* Waveform */
+  canvas#waveform {
+    width: 100%;
+    height: 60px;
+    border-radius: 8px;
+    margin-top: 16px;
+    display: none;
+    background: var(--surface2);
+  }
+
+  canvas#waveform.show { display: block; }
+
+  .file-info {
+    margin-top: 16px;
+    padding: 12px 16px;
+    background: var(--surface2);
+    border-radius: 8px;
+    display: none;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    gap: 16px;
+  }
+
+  .file-info.show { display: flex; flex-wrap: wrap; gap: 16px; }
+
+  .file-info-item span { color: var(--accent2); font-weight: 700; }
+
+  /* Pitch shift note */
+  .pitch-note {
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    margin-top: 6px;
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="logo">HUM → MIDI</div>
+    <div class="tagline">単音メロディ変換ツール</div>
+  </header>
+
+  <!-- Upload -->
+  <div class="upload-zone" id="uploadZone">
+    <span class="upload-icon">🎵</span>
+    <div class="upload-title">WAVファイルをドロップ</div>
+    <div class="upload-sub">または クリックして選択 · .wav / .mp3 / .ogg 対応</div>
+    <input type="file" id="fileInput" accept=".wav,.mp3,.ogg,audio/*">
+  </div>
+
+  <!-- File info -->
+  <div class="file-info" id="fileInfo">
+    <div class="file-info-item">ファイル: <span id="fileName">-</span></div>
+    <div class="file-info-item">長さ: <span id="fileDuration">-</span></div>
+    <div class="file-info-item">サンプルレート: <span id="fileSampleRate">-</span></div>
+  </div>
+
+  <!-- Waveform -->
+  <canvas id="waveform"></canvas>
+
+  <!-- Controls -->
+  <div class="controls">
+    <div class="control-card">
+      <div class="control-label">
+        テンポ (BPM)
+        <span class="control-value" id="tempoVal">120</span>
+      </div>
+      <input type="range" id="tempoSlider" min="40" max="240" value="120" step="1">
+    </div>
+    <div class="control-card">
+      <div class="control-label">
+        音程シフト (半音)
+        <span class="control-value" id="shiftVal">0</span>
+      </div>
+      <input type="range" id="shiftSlider" min="-12" max="12" value="0" step="1">
+      <div class="pitch-note">＋でキーアップ / −でキーダウン</div>
+    </div>
+    <div class="control-card">
+      <div class="control-label">
+        感度 (ノイズ除去)
+        <span class="control-value" id="sensitivityVal">0</span>
+      </div>
+      <input type="range" id="sensitivitySlider" min="0" max="0.3" value="0" step="0.01">
+    </div>
+    <div class="control-card">
+      <div class="control-label">
+        最短音符 (ms)
+        <span class="control-value" id="minNoteVal">50</span>
+      </div>
+      <input type="range" id="minNoteSlider" min="1" max="300" value="50" step="1">
+    </div>
+  </div>
+
+  <!-- Analyze button -->
+  <button class="btn-primary" id="analyzeBtn" disabled>
+    ▶ 解析して MIDI 変換
+  </button>
+
+  <!-- Progress -->
+  <div class="progress-wrap" id="progressWrap">
+    <div class="progress-bar-bg"><div class="progress-bar-fill" id="progressBar" style="width:0%"></div></div>
+    <div class="progress-text" id="progressText">準備中...</div>
+  </div>
+
+  <!-- Piano Roll -->
+  <div class="piano-roll-section" id="pianoRollSection">
+    <div class="section-header">
+      <div class="section-title">🎹 ピアノロール</div>
+      <div class="stats">
+        <div>ノート数: <span class="stat-val" id="noteCount">0</span></div>
+        <div>音域: <span class="stat-val" id="noteRange">-</span></div>
+      </div>
+    </div>
+    <div class="piano-roll-container">
+      <div class="piano-roll-scroll">
+        <canvas id="pianoRoll"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Note chips -->
+  <div class="note-list-section" id="noteListSection">
+    <div class="section-title">検出ノート</div>
+    <div class="note-chips" id="noteChips"></div>
+  </div>
+
+  <!-- Playback -->
+  <div class="playback-section" id="playbackSection">
+    <button class="btn-play" id="playBtn">▶ プレビュー再生</button>
+    <div class="playhead-info" id="playheadInfo">Web Audio API で MIDI プレビュー</div>
+  </div>
+
+  <!-- Download -->
+  <div class="download-section" id="downloadSection">
+    <button class="btn-download btn-midi" id="downloadBtn">
+      ⬇ MIDI ファイルをダウンロード
+    </button>
+    <button class="btn-download btn-reset" id="resetBtn">
+      ↺ リセット
+    </button>
+  </div>
+
+</div>
+
+<script>
+// =============================================
+// STATE
+// =============================================
+let audioBuffer = null;
+let detectedNotes = [];
+let midiData = null;
+let isPlaying = false;
+let playbackNodes = [];
+let audioCtx = null;
+
+// =============================================
+// UTILS
+// =============================================
+function getAudioContext() {
+  if (!audioCtx || audioCtx.state === 'closed') {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  return audioCtx;
+}
+
+const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+
+function midiToName(midi) {
+  const oct = Math.floor(midi / 12) - 1;
+  return NOTE_NAMES[midi % 12] + oct;
+}
+
+function freqToMidi(freq) {
+  return 69 + 12 * Math.log2(freq / 440);
+}
+
+function midiToFreq(midi) {
+  return 440 * Math.pow(2, (midi - 69) / 12);
+}
+
+function getNoteColor(midi) {
+  const colors = ['#7c3aed','#6366f1','#7c3aed','#0ea5e9','#6366f1','#06b6d4','#0891b2','#10b981','#059669','#f59e0b','#d97706','#ef4444'];
+  return colors[midi % 12];
+}
+
+// =============================================
+// UI EVENTS
+// =============================================
+const uploadZone = document.getElementById('uploadZone');
+const fileInput = document.getElementById('fileInput');
+const analyzeBtn = document.getElementById('analyzeBtn');
+
+uploadZone.addEventListener('click', () => fileInput.click());
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
+uploadZone.addEventListener('drop', e => {
+  e.preventDefault();
+  uploadZone.classList.remove('drag-over');
+  if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', e => { if (e.target.files[0]) loadFile(e.target.files[0]); });
+
+document.getElementById('tempoSlider').addEventListener('input', function() {
+  document.getElementById('tempoVal').textContent = this.value;
+  if (detectedNotes.length) rerender();
+});
+document.getElementById('shiftSlider').addEventListener('input', function() {
+  document.getElementById('shiftVal').textContent = (this.value > 0 ? '+' : '') + this.value;
+  if (detectedNotes.length) rerender();
+});
+document.getElementById('sensitivitySlider').addEventListener('input', function() {
+  document.getElementById('sensitivityVal').textContent = this.value;
+});
+document.getElementById('minNoteSlider').addEventListener('input', function() {
+  document.getElementById('minNoteVal').textContent = this.value;
+});
+
+analyzeBtn.addEventListener('click', analyzeAudio);
+document.getElementById('downloadBtn').addEventListener('click', downloadMidi);
+document.getElementById('resetBtn').addEventListener('click', reset);
+document.getElementById('playBtn').addEventListener('click', togglePlay);
+
+// =============================================
+// FILE LOADING
+// =============================================
+async function loadFile(file) {
+  reset();
+  const ctx = getAudioContext();
+  const arrayBuffer = await file.arrayBuffer();
+  try {
+    audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+  } catch(e) {
+    alert('音声ファイルの読み込みに失敗しました。WAV/MP3/OGG ファイルを使用してください。');
+    return;
+  }
+
+  // File info
+  document.getElementById('fileName').textContent = file.name;
+  document.getElementById('fileDuration').textContent = audioBuffer.duration.toFixed(2) + ' 秒';
+  document.getElementById('fileSampleRate').textContent = audioBuffer.sampleRate + ' Hz';
+  document.getElementById('fileInfo').classList.add('show');
+
+  drawWaveform(audioBuffer);
+  detectTempo(audioBuffer);
+  analyzeBtn.disabled = false;
+  uploadZone.style.borderColor = 'var(--accent)';
+  uploadZone.querySelector('.upload-title').textContent = '✓ ' + file.name;
+}
+
+// =============================================
+// WAVEFORM DRAW
+// =============================================
+function drawWaveform(buffer) {
+  const canvas = document.getElementById('waveform');
+  canvas.classList.add('show');
+  canvas.width = canvas.offsetWidth * devicePixelRatio;
+  canvas.height = 60 * devicePixelRatio;
+  const ctx2 = canvas.getContext('2d');
+  const data = buffer.getChannelData(0);
+  const step = Math.ceil(data.length / canvas.width);
+  const w = canvas.width, h = canvas.height;
+
+  ctx2.fillStyle = '#12121a';
+  ctx2.fillRect(0, 0, w, h);
+
+  const grad = ctx2.createLinearGradient(0, 0, w, 0);
+  grad.addColorStop(0, '#7c3aed');
+  grad.addColorStop(0.5, '#06b6d4');
+  grad.addColorStop(1, '#7c3aed');
+  ctx2.strokeStyle = grad;
+  ctx2.lineWidth = 1;
+  ctx2.beginPath();
+
+  for (let i = 0; i < w; i++) {
+    let min = 1, max = -1;
+    for (let j = 0; j < step; j++) {
+      const val = data[i * step + j] || 0;
+      if (val < min) min = val;
+      if (val > max) max = val;
+    }
+    const y1 = ((1 - max) / 2) * h;
+    const y2 = ((1 - min) / 2) * h;
+    ctx2.moveTo(i, y1);
+    ctx2.lineTo(i, y2);
+  }
+  ctx2.stroke();
+}
+
+// =============================================
+// PITCH DETECTION (YIN Algorithm)
+// =============================================
+function yin(buffer, sampleRate, minFreq = 60, maxFreq = 2000) {
+  const bufferSize = buffer.length;
+  const threshold = 0.12;
+  const maxLag = Math.floor(sampleRate / minFreq);
+  const minLag = Math.floor(sampleRate / maxFreq);
+
+  // Step 1: Difference function
+  const diff = new Float32Array(maxLag);
+  for (let tau = 1; tau < maxLag; tau++) {
+    let sum = 0;
+    const limit = Math.min(bufferSize - tau, bufferSize);
+    for (let i = 0; i < limit; i++) {
+      const delta = buffer[i] - buffer[i + tau];
+      sum += delta * delta;
+    }
+    diff[tau] = sum;
+  }
+
+  // Step 2: Cumulative Mean Normalized Difference
+  const cmnd = new Float32Array(maxLag);
+  cmnd[0] = 1;
+  let runningSum = 0;
+  for (let tau = 1; tau < maxLag; tau++) {
+    runningSum += diff[tau];
+    cmnd[tau] = runningSum === 0 ? 0 : diff[tau] / (runningSum / tau);
+  }
+
+  // Step 3: Absolute threshold
+  let tau = minLag;
+  while (tau < maxLag) {
+    if (cmnd[tau] < threshold) {
+      // parabolic interpolation
+      while (tau + 1 < maxLag && cmnd[tau + 1] < cmnd[tau]) tau++;
+      const betterTau = tau + (cmnd[tau - 1] - cmnd[tau + 1]) / (2 * (2 * cmnd[tau] - cmnd[tau - 1] - cmnd[tau + 1]));
+      return sampleRate / betterTau;
+    }
+    tau++;
+  }
+
+  // Fallback: min of cmnd in range
+  let minVal = Infinity, bestTau = -1;
+  for (let t = minLag; t < maxLag; t++) {
+    if (cmnd[t] < minVal) { minVal = cmnd[t]; bestTau = t; }
+  }
+  if (bestTau > 0 && minVal < 0.35) return sampleRate / bestTau;
+  return -1;
+}
+
+// =============================================
+// TEMPO AUTO-DETECTION (onset-based autocorrelation)
+// =============================================
+function detectTempo(buffer) {
+  const sampleRate = buffer.sampleRate;
+  const data = buffer.getChannelData(0);
+
+  // 1. Compute onset envelope via HFC (high-frequency content) in small hops
+  const hopSize = Math.round(sampleRate * 0.01);   // 10ms
+  const windowSize = Math.round(sampleRate * 0.04); // 40ms
+  const numFrames = Math.floor((data.length - windowSize) / hopSize);
+
+  const envelope = new Float32Array(numFrames);
+  for (let f = 0; f < numFrames; f++) {
+    const start = f * hopSize;
+    let energy = 0;
+    for (let i = 0; i < windowSize; i++) {
+      energy += data[start + i] * data[start + i];
+    }
+    envelope[f] = Math.sqrt(energy / windowSize);
+  }
+
+  // 2. Onset strength: positive derivative of envelope
+  const onset = new Float32Array(numFrames);
+  for (let f = 1; f < numFrames; f++) {
+    const diff = envelope[f] - envelope[f - 1];
+    onset[f] = diff > 0 ? diff : 0;
+  }
+
+  // 3. Autocorrelation of onset signal
+  // BPM range: 60–200 → period in frames
+  const fpb60  = Math.round(60000 / (hopSize / sampleRate * 1000) / 60);  // frames per beat at 60 BPM
+  const fpb200 = Math.round(60000 / (hopSize / sampleRate * 1000) / 200); // frames per beat at 200 BPM
+  const frameDurationMs = hopSize / sampleRate * 1000;
+
+  let bestLag = fpb60;
+  let bestScore = -Infinity;
+
+  for (let lag = fpb200; lag <= fpb60; lag++) {
+    let score = 0;
+    const count = Math.min(numFrames - lag, 800); // use up to 800 frames
+    for (let i = 0; i < count; i++) {
+      score += onset[i] * onset[i + lag];
+    }
+    // Also check 2x lag (harmonic boost)
+    const lag2 = lag * 2;
+    if (lag2 < numFrames) {
+      let score2 = 0;
+      const count2 = Math.min(numFrames - lag2, 800);
+      for (let i = 0; i < count2; i++) score2 += onset[i] * onset[i + lag2];
+      score += score2 * 0.5;
+    }
+    if (score > bestScore) { bestScore = score; bestLag = lag; }
+  }
+
+  const detectedBpm = Math.round(60000 / (bestLag * frameDurationMs));
+  const clampedBpm = Math.max(40, Math.min(240, detectedBpm));
+
+  // Update UI
+  const slider = document.getElementById('tempoSlider');
+  const label = document.getElementById('tempoVal');
+  slider.value = clampedBpm;
+  label.textContent = clampedBpm + ' ♪';
+  label.style.color = 'var(--accent3)';
+  setTimeout(() => { label.textContent = clampedBpm; label.style.color = ''; }, 2000);
+}
+
+
+async function analyzeAudio() {
+  if (!audioBuffer) return;
+
+  analyzeBtn.disabled = true;
+  document.getElementById('progressWrap').classList.add('show');
+  detectedNotes = [];
+
+  const sensitivity = parseFloat(document.getElementById('sensitivitySlider').value);
+  const minNoteMs = parseInt(document.getElementById('minNoteSlider').value);
+
+  const sampleRate = audioBuffer.sampleRate;
+  const channelData = audioBuffer.getChannelData(0);
+  const totalSamples = channelData.length;
+
+  const windowSize = Math.round(sampleRate * 0.04); // 40ms window
+  const hopSize = Math.round(sampleRate * 0.01);    // 10ms hop
+  const totalFrames = Math.floor((totalSamples - windowSize) / hopSize);
+
+  // Compute RMS for whole signal (for normalization)
+  let totalRms = 0;
+  for (let i = 0; i < totalSamples; i++) totalRms += channelData[i] * channelData[i];
+  totalRms = Math.sqrt(totalRms / totalSamples);
+  const silenceThreshold = sensitivity === 0
+    ? totalRms * 0.1   // 0=ノイズ除去済み想定: 極めて低いしきい値
+    : Math.max(sensitivity, totalRms * 0.3);
+
+  const frameFreqs = [];
+  let processed = 0;
+
+  // Process in chunks to avoid blocking UI
+  const chunkSize = 200;
+
+  async function processChunk(startFrame) {
+    const end = Math.min(startFrame + chunkSize, totalFrames);
+    for (let f = startFrame; f < end; f++) {
+      const start = f * hopSize;
+      const frame = channelData.slice(start, start + windowSize);
+
+      // RMS check
+      let rms = 0;
+      for (let i = 0; i < frame.length; i++) rms += frame[i] * frame[i];
+      rms = Math.sqrt(rms / frame.length);
+
+      if (rms < silenceThreshold) {
+        frameFreqs.push(-1);
+        continue;
+      }
+
+      // Apply Hanning window
+      const windowed = new Float32Array(frame.length);
+      for (let i = 0; i < frame.length; i++) {
+        windowed[i] = frame[i] * (0.5 - 0.5 * Math.cos(2 * Math.PI * i / (frame.length - 1)));
+      }
+
+      const freq = yin(windowed, sampleRate);
+      frameFreqs.push(freq > 0 ? freq : -1);
+    }
+
+    processed = end;
+    const pct = Math.round((processed / totalFrames) * 100);
+    document.getElementById('progressBar').style.width = pct + '%';
+    document.getElementById('progressText').textContent = `解析中... ${pct}%`;
+
+    if (end < totalFrames) {
+      await new Promise(r => setTimeout(r, 0));
+      return processChunk(end);
+    }
+  }
+
+  await processChunk(0);
+
+  // Smooth: median filter over 3 frames
+  for (let i = 1; i < frameFreqs.length - 1; i++) {
+    if (frameFreqs[i] === -1) continue;
+    const vals = [frameFreqs[i-1], frameFreqs[i], frameFreqs[i+1]].filter(v => v > 0).sort((a,b)=>a-b);
+    if (vals.length > 0) frameFreqs[i] = vals[Math.floor(vals.length/2)];
+  }
+
+  // Convert frequencies to MIDI notes
+  const frameDurationMs = (hopSize / sampleRate) * 1000;
+  const minFrames = Math.ceil(minNoteMs / frameDurationMs);
+
+  // Quantize to MIDI
+  const midiFrames = frameFreqs.map(f => f > 0 ? Math.round(freqToMidi(f)) : -1);
+
+  // Group into note events
+  let currentNote = -1;
+  let noteStart = 0;
+
+  for (let i = 0; i <= midiFrames.length; i++) {
+    const note = i < midiFrames.length ? midiFrames[i] : -1;
+    if (note !== currentNote) {
+      if (currentNote !== -1 && (i - noteStart) >= minFrames) {
+        detectedNotes.push({
+          midi: currentNote,
+          startMs: noteStart * frameDurationMs,
+          durationMs: (i - noteStart) * frameDurationMs
+        });
+      }
+      currentNote = note;
+      noteStart = i;
+    }
+  }
+
+  document.getElementById('progressText').textContent = `完了！ ${detectedNotes.length} ノート検出`;
+
+  if (detectedNotes.length === 0) {
+    document.getElementById('progressText').textContent = '⚠ ノートが検出されませんでした。感度を上げてみてください。';
+    analyzeBtn.disabled = false;
+    return;
+  }
+
+  rerender();
+  analyzeBtn.disabled = false;
+}
+
+// =============================================
+// RE-RENDER (when tempo/shift changes)
+// =============================================
+function rerender() {
+  const shift = parseInt(document.getElementById('shiftSlider').value);
+  const tempo = parseInt(document.getElementById('tempoSlider').value);
+
+  // Apply shift
+  const shiftedNotes = detectedNotes.map(n => ({
+    ...n,
+    midi: Math.max(0, Math.min(127, n.midi + shift))
+  }));
+
+  // Build MIDI
+  midiData = buildMidi(shiftedNotes, tempo);
+
+  // Draw piano roll
+  drawPianoRoll(shiftedNotes);
+
+  // Note chips
+  renderNoteChips(shiftedNotes);
+
+  // Stats
+  document.getElementById('noteCount').textContent = shiftedNotes.length;
+  const midis = shiftedNotes.map(n => n.midi);
+  const minM = Math.min(...midis), maxM = Math.max(...midis);
+  document.getElementById('noteRange').textContent = midiToName(minM) + ' – ' + midiToName(maxM);
+
+  // Show sections
+  document.getElementById('pianoRollSection').classList.add('show');
+  document.getElementById('noteListSection').classList.add('show');
+  document.getElementById('downloadSection').classList.add('show');
+  document.getElementById('playbackSection').classList.add('show');
+}
+
+// =============================================
+// PIANO ROLL
+// =============================================
+function drawPianoRoll(notes) {
+  const canvas = document.getElementById('pianoRoll');
+  const ROW_HEIGHT = 10;
+  const LABEL_WIDTH = 36;
+  const SEC_PER_PX = 0.004; // 1px = 4ms
+
+  if (!notes.length) return;
+
+  const totalMs = Math.max(...notes.map(n => n.startMs + n.durationMs));
+  const width = LABEL_WIDTH + totalMs / (SEC_PER_PX * 1000) + 40;
+
+  const midis = notes.map(n => n.midi);
+  const minMidi = Math.max(0, Math.min(...midis) - 2);
+  const maxMidi = Math.min(127, Math.max(...midis) + 2);
+  const numRows = maxMidi - minMidi + 1;
+  const height = numRows * ROW_HEIGHT;
+
+  canvas.width = Math.ceil(width);
+  canvas.height = height;
+  canvas.style.height = height + 'px';
+
+  const ctx = canvas.getContext('2d');
+
+  // Background
+  ctx.fillStyle = '#12121a';
+  ctx.fillRect(0, 0, width, height);
+
+  // Piano keys + grid rows
+  for (let midi = minMidi; midi <= maxMidi; midi++) {
+    const y = (maxMidi - midi) * ROW_HEIGHT;
+    const isBlack = [1,3,6,8,10].includes(midi % 12);
+
+    // Row bg
+    ctx.fillStyle = isBlack ? '#0f0f18' : '#12121a';
+    ctx.fillRect(LABEL_WIDTH, y, width - LABEL_WIDTH, ROW_HEIGHT);
+
+    // Horizontal grid line
+    ctx.strokeStyle = '#1e1e2e';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(LABEL_WIDTH, y);
+    ctx.lineTo(width, y);
+    ctx.stroke();
+
+    // Piano key
+    ctx.fillStyle = isBlack ? '#1a1a2e' : '#2a2a3e';
+    ctx.fillRect(0, y, LABEL_WIDTH - 2, ROW_HEIGHT - 1);
+
+    // Note name for C notes
+    if (midi % 12 === 0) {
+      ctx.fillStyle = '#6b6b8a';
+      ctx.font = `${ROW_HEIGHT * 0.7}px Space Mono, monospace`;
+      ctx.fillText(midiToName(midi), 2, y + ROW_HEIGHT - 2);
+    }
+  }
+
+  // Time grid (every beat = 500ms at 120bpm)
+  const tempo = parseInt(document.getElementById('tempoSlider').value);
+  const beatMs = 60000 / tempo;
+  for (let t = 0; t < totalMs + beatMs; t += beatMs) {
+    const x = LABEL_WIDTH + t / (SEC_PER_PX * 1000);
+    ctx.strokeStyle = 'rgba(124,58,237,0.2)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, height);
+    ctx.stroke();
+  }
+
+  // Notes
+  notes.forEach(note => {
+    const x = LABEL_WIDTH + note.startMs / (SEC_PER_PX * 1000);
+    const y = (maxMidi - note.midi) * ROW_HEIGHT;
+    const w = Math.max(4, note.durationMs / (SEC_PER_PX * 1000) - 1);
+    const color = getNoteColor(note.midi);
+
+    ctx.fillStyle = color;
+    ctx.globalAlpha = 0.85;
+    ctx.beginPath();
+    ctx.roundRect(x, y + 1, w, ROW_HEIGHT - 2, 2);
+    ctx.fill();
+
+    // Bright top edge
+    ctx.globalAlpha = 0.5;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(x, y + 1, w, 1);
+
+    ctx.globalAlpha = 1;
+  });
+}
+
+// =============================================
+// NOTE CHIPS
+// =============================================
+function renderNoteChips(notes) {
+  const container = document.getElementById('noteChips');
+  container.innerHTML = '';
+  notes.forEach((note, i) => {
+    const chip = document.createElement('span');
+    chip.className = 'note-chip';
+    const color = getNoteColor(note.midi);
+    chip.style.borderColor = color;
+    chip.style.color = color;
+    chip.style.background = color + '18';
+    chip.textContent = midiToName(note.midi);
+    container.appendChild(chip);
+  });
+}
+
+// =============================================
+// MIDI BUILDER
+// =============================================
+function buildMidi(notes, tempo) {
+  const TICKS_PER_BEAT = 480;
+  const MS_PER_BEAT = 60000 / tempo;
+  const TICKS_PER_MS = TICKS_PER_BEAT / MS_PER_BEAT;
+
+  function varLen(value) {
+    const bytes = [];
+    bytes.unshift(value & 0x7F);
+    value >>= 7;
+    while (value > 0) {
+      bytes.unshift((value & 0x7F) | 0x80);
+      value >>= 7;
+    }
+    return bytes;
+  }
+
+  function writeUint32BE(val) {
+    return [(val >> 24) & 0xFF, (val >> 16) & 0xFF, (val >> 8) & 0xFF, val & 0xFF];
+  }
+
+  function writeUint16BE(val) {
+    return [(val >> 8) & 0xFF, val & 0xFF];
+  }
+
+  // Sort events
+  const events = [];
+  notes.forEach(n => {
+    const startTick = Math.round(n.startMs * TICKS_PER_MS);
+    const durTick = Math.max(1, Math.round(n.durationMs * TICKS_PER_MS) - 1);
+    events.push({ tick: startTick, type: 'on', note: n.midi });
+    events.push({ tick: startTick + durTick, type: 'off', note: n.midi });
+  });
+  events.sort((a, b) => a.tick - b.tick || (a.type === 'off' ? -1 : 1));
+
+  // Track data
+  const track = [];
+  // Tempo event
+  const usPerBeat = Math.round(60000000 / tempo);
+  track.push(...[0x00, 0xFF, 0x51, 0x03,
+    (usPerBeat >> 16) & 0xFF, (usPerBeat >> 8) & 0xFF, usPerBeat & 0xFF]);
+  // Program change (piano = 0)
+  track.push(...[0x00, 0xC0, 0x00]);
+
+  let currentTick = 0;
+  events.forEach(ev => {
+    const delta = ev.tick - currentTick;
+    currentTick = ev.tick;
+    track.push(...varLen(delta));
+    if (ev.type === 'on') {
+      track.push(0x90, ev.note, 100);
+    } else {
+      track.push(0x80, ev.note, 0);
+    }
+  });
+  // End of track
+  track.push(0x00, 0xFF, 0x2F, 0x00);
+
+  const trackLen = track.length;
+
+  // Assemble
+  const header = [
+    0x4D,0x54,0x68,0x64, // MThd
+    0,0,0,6,             // length
+    0,0,                 // format 0
+    0,1,                 // 1 track
+    ...writeUint16BE(TICKS_PER_BEAT)
+  ];
+
+  const trackChunk = [
+    0x4D,0x54,0x72,0x6B, // MTrk
+    ...writeUint32BE(trackLen),
+    ...track
+  ];
+
+  return new Uint8Array([...header, ...trackChunk]);
+}
+
+// =============================================
+// DOWNLOAD MIDI
+// =============================================
+function downloadMidi() {
+  if (!midiData) return;
+  const blob = new Blob([midiData], { type: 'audio/midi' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'hum_melody.mid';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// =============================================
+// PREVIEW PLAYBACK
+// =============================================
+function togglePlay() {
+  if (isPlaying) {
+    stopPlay();
+  } else {
+    startPlay();
+  }
+}
+
+function stopPlay() {
+  isPlaying = false;
+  playbackNodes.forEach(n => { try { n.stop(); } catch(e) {} });
+  playbackNodes = [];
+  document.getElementById('playBtn').textContent = '▶ プレビュー再生';
+}
+
+function startPlay() {
+  if (!detectedNotes.length) return;
+  isPlaying = true;
+  document.getElementById('playBtn').textContent = '■ 停止';
+
+  const ctx = getAudioContext();
+  const shift = parseInt(document.getElementById('shiftSlider').value);
+  const tempo = parseInt(document.getElementById('tempoSlider').value);
+
+  const shiftedNotes = detectedNotes.map(n => ({
+    ...n, midi: Math.max(0, Math.min(127, n.midi + shift))
+  }));
+
+  const now = ctx.currentTime;
+  const totalDuration = Math.max(...shiftedNotes.map(n => n.startMs + n.durationMs)) / 1000;
+
+  shiftedNotes.forEach(note => {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    const startTime = now + note.startMs / 1000;
+    const dur = note.durationMs / 1000;
+
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(midiToFreq(note.midi), startTime);
+
+    gain.gain.setValueAtTime(0, startTime);
+    gain.gain.linearRampToValueAtTime(0.3, startTime + 0.02);
+    gain.gain.setValueAtTime(0.3, startTime + dur - 0.03);
+    gain.gain.linearRampToValueAtTime(0, startTime + dur);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(startTime);
+    osc.stop(startTime + dur + 0.01);
+    playbackNodes.push(osc);
+
+    osc.onended = () => {
+      const allDone = playbackNodes.every(n => n.context && n.context.state !== 'running');
+    };
+  });
+
+  setTimeout(() => {
+    if (isPlaying) stopPlay();
+  }, totalDuration * 1000 + 200);
+}
+
+// =============================================
+// RESET
+// =============================================
+function reset() {
+  stopPlay();
+  audioBuffer = null;
+  detectedNotes = [];
+  midiData = null;
+
+  analyzeBtn.disabled = true;
+  uploadZone.style.borderColor = '';
+  uploadZone.querySelector('.upload-title').textContent = 'WAVファイルをドロップ';
+  document.getElementById('fileInfo').classList.remove('show');
+  document.getElementById('waveform').classList.remove('show');
+  document.getElementById('progressWrap').classList.remove('show');
+  document.getElementById('pianoRollSection').classList.remove('show');
+  document.getElementById('noteListSection').classList.remove('show');
+  document.getElementById('downloadSection').classList.remove('show');
+  document.getElementById('playbackSection').classList.remove('show');
+  document.getElementById('progressBar').style.width = '0%';
+  document.getElementById('noteChips').innerHTML = '';
+  fileInput.value = '';
+}
+</script>
+</body>
+</html>
